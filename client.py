@@ -65,10 +65,14 @@ class CamMicClient:
         preview_frame = tk.Frame(self.root, bg="#1e1e2e")
         preview_frame.pack(padx=12, pady=(10, 4))
         self.preview_label = tk.Label(
-            preview_frame, bg="#11111b", width=320, height=180,
+            preview_frame, bg="#11111b",
             text="Sem sinal", fg="#585b70", font=("Segoe UI", 10)
         )
         self.preview_label.pack()
+        # força tamanho em pixels via place trick
+        self.preview_label.config(width=1, height=1)
+        preview_frame.config(width=320, height=180)
+        preview_frame.pack_propagate(False)
 
         # Controles
         ctrl = tk.Frame(self.root, bg="#1e1e2e")
@@ -245,7 +249,7 @@ class CamMicClient:
 
     def _update_preview(self, rgb_frame):
         img = Image.fromarray(rgb_frame)
-        img = img.resize((640, 480), Image.Resampling.LANCZOS)
+        img = img.resize((320, 180), Image.Resampling.LANCZOS)
         photo = ImageTk.PhotoImage(img)
         self.preview_label.configure(image=photo, text="")
         self.preview_label.image = photo  # evita garbage collection
