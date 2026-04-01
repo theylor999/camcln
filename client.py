@@ -66,9 +66,7 @@ class CamMicClient:
             preview_frame, bg="#11111b",
             text="Sem sinal", fg="#585b70", font=("Segoe UI", 10)
         )
-        self.preview_label.pack()
-        # força tamanho em pixels via place trick
-        self.preview_label.config(width=1, height=1)
+        self.preview_label.pack(fill="both", expand=True)
         preview_frame.config(width=320, height=180)
         preview_frame.pack_propagate(False)
 
