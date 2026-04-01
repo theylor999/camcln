@@ -38,6 +38,8 @@ class CamMicClient:
         self.stream_thread = None
         self._stop_event = threading.Event()
         self._virtualcam = None
+        self.mirror_var = tk.BooleanVar(value=False)
+        self.brightness_var = tk.DoubleVar(value=1.0)
 
         self._build_ui()
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
@@ -99,17 +101,36 @@ class CamMicClient:
                  font=("Segoe UI", 9)).grid(
             row=1, column=0, columnspan=4, sticky="w", pady=2)
 
+        # Espelhar
+        tk.Checkbutton(
+            ctrl, text="Espelhar câmera", variable=self.mirror_var,
+            fg="#cdd6f4", bg="#1e1e2e", selectcolor="#313244",
+            activebackground="#1e1e2e", activeforeground="#cdd6f4",
+            font=("Segoe UI", 9)
+        ).grid(row=2, column=0, columnspan=2, sticky="w", pady=2)
+
+        # Brilho
+        tk.Label(ctrl, text="Brilho:", fg="#cdd6f4", bg="#1e1e2e",
+                 font=("Segoe UI", 9)).grid(row=3, column=0, sticky="w", pady=4)
+        self.brightness_scale = tk.Scale(
+            ctrl, variable=self.brightness_var,
+            from_=0.2, to=2.0, resolution=0.05, orient="horizontal",
+            length=180, bg="#1e1e2e", fg="#cdd6f4", troughcolor="#313244",
+            highlightthickness=0, showvalue=True, font=("Segoe UI", 8)
+        )
+        self.brightness_scale.grid(row=3, column=1, columnspan=3, sticky="w", padx=(4, 0))
+
         # Status geral
         self.status_var = tk.StringVar(value="Desconectado.")
         tk.Label(ctrl, textvariable=self.status_var, fg="#89b4fa",
                  bg="#1e1e2e", font=("Segoe UI", 9)).grid(
-            row=2, column=0, columnspan=4, sticky="w", pady=4)
+            row=4, column=0, columnspan=4, sticky="w", pady=4)
 
         # Câmera virtual label quando ativa
         self.vcam_status_var = tk.StringVar(value="")
         tk.Label(ctrl, textvariable=self.vcam_status_var, fg="#a6e3a1",
                  bg="#1e1e2e", font=("Segoe UI", 9, "bold")).grid(
-            row=3, column=0, columnspan=4, sticky="w")
+            row=5, column=0, columnspan=4, sticky="w")
 
         # Botão conectar
         btn_frame = tk.Frame(self.root, bg="#1e1e2e")
@@ -194,6 +215,16 @@ class CamMicClient:
                     break
 
                 frame = cv2.resize(frame, (FRAME_W, FRAME_H))
+
+                # Espelhar
+                if self.mirror_var.get():
+                    frame = cv2.flip(frame, 1)
+
+                # Brilho
+                b = self.brightness_var.get()
+                if b != 1.0:
+                    frame = cv2.convertScaleAbs(frame, alpha=b, beta=0)
+
                 rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
                 # Câmera virtual
