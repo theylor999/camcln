@@ -40,8 +40,11 @@ class CamMicClient:
         self._virtualcam = None
         self.mirror_var = tk.BooleanVar(value=False)
         self.brightness_var = tk.DoubleVar(value=1.0)
+        self.blackout_var = tk.BooleanVar(value=False)
+        self._hotkey = "F9"  # tecla padrão
 
         self._build_ui()
+        self.root.bind("<F9>", self._toggle_blackout)
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
 
     # ── UI ────────────────────────────────────────────────────────────────────
@@ -120,17 +123,38 @@ class CamMicClient:
         )
         self.brightness_scale.grid(row=3, column=1, columnspan=3, sticky="w", padx=(4, 0))
 
+        # Câmera preta (blackout)
+        tk.Label(ctrl, text="Tecla câmera preta:", fg="#cdd6f4", bg="#1e1e2e",
+                 font=("Segoe UI", 9)).grid(row=4, column=0, sticky="w", pady=4)
+        hotkey_frame = tk.Frame(ctrl, bg="#1e1e2e")
+        hotkey_frame.grid(row=4, column=1, columnspan=3, sticky="w", padx=(4, 0))
+        self.hotkey_entry = tk.Entry(
+            hotkey_frame, font=("Segoe UI", 10, "bold"), width=6,
+            bg="#313244", fg="#f9e2af", insertbackground="#f9e2af", relief="flat"
+        )
+        self.hotkey_entry.insert(0, self._hotkey)
+        self.hotkey_entry.pack(side="left")
+        tk.Button(
+            hotkey_frame, text="Definir", bg="#45475a", fg="#cdd6f4",
+            relief="flat", font=("Segoe UI", 8), command=self._set_hotkey
+        ).pack(side="left", padx=(4, 0))
+        self.blackout_indicator = tk.Label(
+            hotkey_frame, text="", fg="#f38ba8", bg="#1e1e2e",
+            font=("Segoe UI", 9, "bold")
+        )
+        self.blackout_indicator.pack(side="left", padx=(8, 0))
+
         # Status geral
         self.status_var = tk.StringVar(value="Desconectado.")
         tk.Label(ctrl, textvariable=self.status_var, fg="#89b4fa",
                  bg="#1e1e2e", font=("Segoe UI", 9)).grid(
-            row=4, column=0, columnspan=4, sticky="w", pady=4)
+            row=5, column=0, columnspan=4, sticky="w", pady=4)
 
         # Câmera virtual label quando ativa
         self.vcam_status_var = tk.StringVar(value="")
         tk.Label(ctrl, textvariable=self.vcam_status_var, fg="#a6e3a1",
                  bg="#1e1e2e", font=("Segoe UI", 9, "bold")).grid(
-            row=5, column=0, columnspan=4, sticky="w")
+            row=6, column=0, columnspan=4, sticky="w")
 
         # Botão conectar
         btn_frame = tk.Frame(self.root, bg="#1e1e2e")
@@ -143,6 +167,31 @@ class CamMicClient:
             command=self._toggle_connection
         )
         self.toggle_btn.pack()
+
+    # ── Hotkey / Blackout ─────────────────────────────────────────────────────
+
+    def _set_hotkey(self):
+        key = self.hotkey_entry.get().strip()
+        if not key:
+            return
+        # Remove binding antigo
+        try:
+            self.root.unbind(f"<{self._hotkey}>")
+        except Exception:
+            pass
+        self._hotkey = key
+        try:
+            self.root.bind(f"<{key}>", self._toggle_blackout)
+            self.hotkey_entry.config(fg="#a6e3a1")
+        except Exception:
+            self.hotkey_entry.config(fg="#f38ba8")
+
+    def _toggle_blackout(self, _event=None):
+        self.blackout_var.set(not self.blackout_var.get())
+        if self.blackout_var.get():
+            self.blackout_indicator.config(text="● CÂMERA PRETA")
+        else:
+            self.blackout_indicator.config(text="")
 
     # ── Conexão ───────────────────────────────────────────────────────────────
 
@@ -216,14 +265,18 @@ class CamMicClient:
 
                 frame = cv2.resize(frame, (FRAME_W, FRAME_H))
 
-                # Espelhar
-                if self.mirror_var.get():
-                    frame = cv2.flip(frame, 1)
+                # Câmera preta
+                if self.blackout_var.get():
+                    frame[:] = 0
+                else:
+                    # Espelhar
+                    if self.mirror_var.get():
+                        frame = cv2.flip(frame, 1)
 
-                # Brilho
-                b = self.brightness_var.get()
-                if b != 1.0:
-                    frame = cv2.convertScaleAbs(frame, alpha=b, beta=0)
+                    # Brilho
+                    b = self.brightness_var.get()
+                    if b != 1.0:
+                        frame = cv2.convertScaleAbs(frame, alpha=b, beta=0)
 
                 rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
