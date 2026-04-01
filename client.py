@@ -10,9 +10,7 @@ import tkinter as tk
 from tkinter import messagebox
 import threading
 import cv2
-import numpy as np
 from PIL import Image, ImageTk
-import requests
 
 try:
     import pyvirtualcam
@@ -170,11 +168,9 @@ class CamMicClient:
     # ── Loop de stream ────────────────────────────────────────────────────────
 
     def _stream_loop(self, url):
-        try:
-            response = requests.get(url, stream=True, timeout=10)
-            response.raise_for_status()
-        except Exception as e:
-            self._set_status(f"Erro ao conectar: {e}")
+        cap = cv2.VideoCapture(url)
+        if not cap.isOpened():
+            self._set_status(f"Erro: não foi possível conectar em {url}")
             self._schedule(self._disconnect)
             return
 
@@ -192,50 +188,34 @@ class CamMicClient:
                 self._set_vcam_status(f"Câmera virtual indisponível: {e}")
 
         try:
-            boundary = b'--frame'
-            raw = response.raw
-            buf = b""
-
             while not self._stop_event.is_set():
-                chunk = raw.read(4096)
-                if not chunk:
+                ret, frame = cap.read()
+                if not ret:
+                    if not self._stop_event.is_set():
+                        self._set_status("Conexão perdida — servidor desligou?")
                     break
-                buf += chunk
 
-                # Procura pares de imagem JPEG dentro do buffer
-                while True:
-                    start = buf.find(b'\xff\xd8')  # SOI JPEG
-                    end = buf.find(b'\xff\xd9')    # EOI JPEG
-                    if start == -1 or end == -1 or end <= start:
-                        break
+                frame = cv2.resize(frame, (FRAME_W, FRAME_H))
+                rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
-                    jpeg_data = buf[start:end + 2]
-                    buf = buf[end + 2:]
+                # Câmera virtual
+                if vcam is not None:
+                    try:
+                        vcam.send(rgb)
+                        vcam.sleep_until_next_frame()
+                    except Exception:
+                        pass
 
-                    frame_array = np.frombuffer(jpeg_data, dtype=np.uint8)
-                    frame = cv2.imdecode(frame_array, cv2.IMREAD_COLOR)
-                    if frame is None:
-                        continue
-
-                    rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-
-                    # Câmera virtual
-                    if vcam is not None:
-                        try:
-                            vcam.send(rgb)
-                            vcam.sleep_until_next_frame()
-                        except Exception:
-                            pass
-
-                    # Preview GUI reduzido (via root.after para thread safety)
-                    small = cv2.resize(frame, (320, 180))
-                    small_rgb = cv2.cvtColor(small, cv2.COLOR_BGR2RGB)
-                    self._schedule(lambda f=small_rgb: self._update_preview(f))
+                # Preview GUI reduzido
+                small = cv2.resize(frame, (320, 180))
+                small_rgb = cv2.cvtColor(small, cv2.COLOR_BGR2RGB)
+                self._schedule(lambda f=small_rgb: self._update_preview(f))
 
         except Exception as e:
             if not self._stop_event.is_set():
-                self._set_status(f"Conexão perdida: {e}")
+                self._set_status(f"Erro: {e}")
         finally:
+            cap.release()
             if vcam is not None:
                 try:
                     vcam.close()
