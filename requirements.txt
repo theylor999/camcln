@@ -3,3 +3,4 @@ opencv-python>=4.8.0
 Pillow>=10.0.0
 requests>=2.31.0
 pyvirtualcam>=0.15.0
+mediapipe>=0.10.0

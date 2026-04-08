@@ -7,9 +7,10 @@ Pré-requisito: OBS Studio instalado (cria o driver de câmera virtual).
 """
 
 import tkinter as tk
-from tkinter import messagebox
+from tkinter import messagebox, filedialog
 import threading
 import cv2
+import numpy as np
 from PIL import Image, ImageTk
 
 try:
@@ -42,6 +43,10 @@ class CamMicClient:
         self.brightness_var = tk.DoubleVar(value=1.0)
         self.blackout_var = tk.BooleanVar(value=False)
         self._hotkey = "F9"  # tecla padrão
+        self.bg_enabled_var = tk.BooleanVar(value=False)
+        self._bg_name_var = tk.StringVar(value="Nenhuma")
+        self._bg_image_cv = None
+        self._segmentor = None
 
         self._build_ui()
         self.root.bind("<F9>", self._toggle_blackout)
@@ -123,11 +128,29 @@ class CamMicClient:
         )
         self.brightness_scale.grid(row=3, column=1, columnspan=3, sticky="w", padx=(4, 0))
 
+        # Fundo virtual
+        bg_row = tk.Frame(ctrl, bg="#1e1e2e")
+        bg_row.grid(row=4, column=0, columnspan=4, sticky="w", pady=2)
+        tk.Checkbutton(
+            bg_row, text="Fundo virtual", variable=self.bg_enabled_var,
+            fg="#cdd6f4", bg="#1e1e2e", selectcolor="#313244",
+            activebackground="#1e1e2e", activeforeground="#cdd6f4",
+            font=("Segoe UI", 9)
+        ).pack(side="left")
+        tk.Button(
+            bg_row, text="Escolher imagem...", bg="#45475a", fg="#cdd6f4",
+            relief="flat", font=("Segoe UI", 8), command=self._pick_background
+        ).pack(side="left", padx=(8, 0))
+        tk.Label(
+            bg_row, textvariable=self._bg_name_var,
+            fg="#a6adc8", bg="#1e1e2e", font=("Segoe UI", 8)
+        ).pack(side="left", padx=(6, 0))
+
         # Câmera preta (blackout)
         tk.Label(ctrl, text="Tecla câmera preta:", fg="#cdd6f4", bg="#1e1e2e",
-                 font=("Segoe UI", 9)).grid(row=4, column=0, sticky="w", pady=4)
+                 font=("Segoe UI", 9)).grid(row=5, column=0, sticky="w", pady=4)
         hotkey_frame = tk.Frame(ctrl, bg="#1e1e2e")
-        hotkey_frame.grid(row=4, column=1, columnspan=3, sticky="w", padx=(4, 0))
+        hotkey_frame.grid(row=5, column=1, columnspan=3, sticky="w", padx=(4, 0))
         self.hotkey_entry = tk.Entry(
             hotkey_frame, font=("Segoe UI", 10, "bold"), width=6,
             bg="#313244", fg="#f9e2af", insertbackground="#f9e2af", relief="flat"
@@ -148,13 +171,13 @@ class CamMicClient:
         self.status_var = tk.StringVar(value="Desconectado.")
         tk.Label(ctrl, textvariable=self.status_var, fg="#89b4fa",
                  bg="#1e1e2e", font=("Segoe UI", 9)).grid(
-            row=5, column=0, columnspan=4, sticky="w", pady=4)
+            row=6, column=0, columnspan=4, sticky="w", pady=4)
 
         # Câmera virtual label quando ativa
         self.vcam_status_var = tk.StringVar(value="")
         tk.Label(ctrl, textvariable=self.vcam_status_var, fg="#a6e3a1",
                  bg="#1e1e2e", font=("Segoe UI", 9, "bold")).grid(
-            row=6, column=0, columnspan=4, sticky="w")
+            row=7, column=0, columnspan=4, sticky="w")
 
         # Botão conectar
         btn_frame = tk.Frame(self.root, bg="#1e1e2e")
@@ -167,6 +190,21 @@ class CamMicClient:
             command=self._toggle_connection
         )
         self.toggle_btn.pack()
+
+    # ── Fundo Virtual ─────────────────────────────────────────────────────────
+
+    def _pick_background(self):
+        path = filedialog.askopenfilename(
+            title="Escolher imagem de fundo",
+            filetypes=[("Imagens", "*.jpg *.jpeg *.png *.bmp *.webp"), ("Todos", "*.*")]
+        )
+        if path:
+            img = cv2.imread(path)
+            if img is not None:
+                self._bg_image_cv = cv2.resize(img, (FRAME_W, FRAME_H))
+                name = path.replace("\\", "/").split("/")[-1]
+                self._bg_name_var.set(name)
+                self.bg_enabled_var.set(True)
 
     # ── Hotkey / Blackout ─────────────────────────────────────────────────────
 
@@ -277,6 +315,20 @@ class CamMicClient:
                     b = self.brightness_var.get()
                     if b != 1.0:
                         frame = cv2.convertScaleAbs(frame, alpha=b, beta=0)
+
+                    # Fundo virtual
+                    if self.bg_enabled_var.get():
+                        if self._segmentor is None:
+                            import mediapipe as mp
+                            self._segmentor = mp.solutions.selfie_segmentation \
+                                .SelfieSegmentation(model_selection=0)
+                        rgb_seg = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                        result = self._segmentor.process(rgb_seg)
+                        mask = result.segmentation_mask  # float32 (H,W)
+                        mask3 = np.stack([mask] * 3, axis=-1)
+                        bg = self._bg_image_cv if self._bg_image_cv is not None \
+                            else np.zeros_like(frame)
+                        frame = (frame * mask3 + bg * (1.0 - mask3)).astype(np.uint8)
 
                 rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
