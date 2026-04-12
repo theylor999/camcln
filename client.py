@@ -276,7 +276,10 @@ class CamMicClient:
     def _stream_loop(self, url):
         cap = cv2.VideoCapture(url)
         if not cap.isOpened():
-            self._set_status(f"Erro: não foi possível conectar em {url}")
+            self._set_status(
+                f"Timeout — IP errado ou roteador bloqueando. "
+                f"Tente usar o IP do Tailscale (100.x.x.x) se os PCs estiverem em WiFi+Cabo."
+            )
             self._schedule(self._disconnect)
             return
 
